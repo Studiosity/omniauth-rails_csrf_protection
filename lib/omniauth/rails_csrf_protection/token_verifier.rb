@@ -28,17 +28,32 @@ module OmniAuth
       end
 
       def call(env)
-        @request = ActionDispatch::Request.new(env.dup)
+        @request = ActionDispatch::Request.new(env)
 
         unless verified_request?
-          raise ActionController::InvalidAuthenticityToken
+          protection_method_class.new(self).handle_unverified_request
         end
       end
 
+      attr_reader :request
+
       private
 
-        attr_reader :request
-        delegate :params, :session, to: :request
+      delegate :params, :session, :reset_session, to: :request
+
+      def protection_method_class
+        ActionController::RequestForgeryProtection::ProtectionMethods.const_get(protection_method.to_s.classify)
+      rescue NameError
+        ActionController::RequestForgeryProtection::ProtectionMethods::Exception
+      end
+
+      def protection_method
+        if OmniAuth.config.protect_csrf_with.respond_to? :call
+          OmniAuth.config.protect_csrf_with.call request
+        else
+          OmniAuth.config.protect_csrf_with
+        end
+      end
     end
   end
 end
